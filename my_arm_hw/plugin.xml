@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<library path="my_arm_hw">
+  <class
+    name="my_arm_hw/ServoSystem"
+    type="my_arm_hw::ServoSystem"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Servo-based SystemInterface skeleton for my arm.
+    </description>
+  </class>
+</library>
+

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>my_arm_hw</name>
+  <version>0.0.1</version>
+  <description>Hardware interface skeleton for my arm servo driver.</description>
+
+  <maintainer email="1980831792@qq.com">sherlock</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>yaml-cpp</depend>
+
+  <export>
+    <hardware_interface plugin="${prefix}/share/my_arm_hw/plugin.xml"/>
+  </export>
+</package>
+

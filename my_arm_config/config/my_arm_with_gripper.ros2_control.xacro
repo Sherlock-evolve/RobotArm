@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:arg name="hardware_params_file" default="$(find my_arm_config)/config/hardware_params.yaml" />
+    <xacro:macro name="my_arm_with_gripper_ros2_control" params="name initial_positions_file hardware_params_file:=${hardware_params_file}">
+        <xacro:property name="initial_positions" value="${load_yaml(initial_positions_file)['initial_positions']}"/>
+        <xacro:property name="hardware_params" value="${load_yaml(hardware_params_file)}"/>
+
+        <ros2_control name="${name}" type="system">
+            <hardware>
+                <!-- Switch to real hardware plugin-->
+                <plugin>my_arm_hw/ServoSystem</plugin>
+                <param name="device">${hardware_params['device']}</param>
+                <param name="dry_run">${hardware_params.get('dry_run', False)}</param>
+                <param name="joints">${hardware_params['joints']}</param>
+            </hardware>
+            <joint name="shoulder_pan_joint">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                  <param name="initial_value">${initial_positions['shoulder_pan_joint']}</param>
+                </state_interface>
+            </joint>
+            <joint name="shoulder_lift_joint">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                  <param name="initial_value">${initial_positions['shoulder_lift_joint']}</param>
+                </state_interface>
+            </joint>
+            <joint name="elbow_joint">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                  <param name="initial_value">${initial_positions['elbow_joint']}</param>
+                </state_interface>
+            </joint>
+            <joint name="wrist_1_joint">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                  <param name="initial_value">${initial_positions['wrist_1_joint']}</param>
+                </state_interface>
+            </joint>
+            <joint name="wrist_2_joint">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                  <param name="initial_value">${initial_positions['wrist_2_joint']}</param>
+                </state_interface>
+            </joint>
+            <joint name="finger_joint">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                  <param name="initial_value">${initial_positions['finger_joint']}</param>
+                </state_interface>
+            </joint>
+
+        </ros2_control>
+    </xacro:macro>
+</robot>

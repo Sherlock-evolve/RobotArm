@@ -1,0 +1,20 @@
+parameters:
+  name: my_handeye
+  calibration_type: eye_in_hand
+  robot_base_frame: base_link
+  robot_effector_frame: grasp_point_link
+  tracking_base_frame: camera_link
+  tracking_marker_frame: aruco_marker_frame
+  freehand_robot_movement: true
+  move_group_namespace: /
+  move_group: manipulator
+transform:
+  translation:
+    x: -0.095491224572592
+    y: -0.11048763478295491
+    z: -0.029954980431738377
+  rotation:
+    x: 0.3472499006092291
+    y: 0.016799956316418285
+    z: 0.006465940277268208
+    w: 0.9375998398095945

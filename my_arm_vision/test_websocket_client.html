@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>舵机控制 + 视频流测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .control-panel {
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .video-panel {
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .servo-control {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 3px;
+        }
+        input[type="range"] {
+            width: 100%;
+            margin: 5px 0;
+        }
+        button {
+            padding: 8px 15px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 3px;
+            background: #4CAF50;
+            color: white;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #video {
+            width: 100%;
+            max-width: 640px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+        #log {
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>舵机控制 + 视频流测试客户端</h1>
+    
+    <div class="status disconnected" id="status">
+        未连接
+    </div>
+    
+    <div class="container">
+        <div class="control-panel">
+            <h2>舵机控制</h2>
+            <div>
+                <label>服务器地址:</label>
+                <input type="text" id="serverUrl" value="ws://192.168.1.100:8765" style="width: 200px;">
+                <button onclick="connect()">连接</button>
+                <button onclick="disconnect()">断开</button>
+            </div>
+            
+            <div id="servos"></div>
+            
+            <div>
+                <button onclick="sendAll()">发送所有舵机</button>
+                <button onclick="resetAll()">重置所有为零点</button>
+            </div>
+            
+            <h3>日志</h3>
+            <div id="log"></div>
+        </div>
+        
+        <div class="video-panel">
+            <h2>视频流</h2>
+            <img id="video" alt="视频流">
+            <div>
+                <p>视频帧率: <span id="fps">0</span> FPS</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let servos = [];
+        let frameCount = 0;
+        let lastFpsTime = Date.now();
+        
+        // 舵机配置（根据 hardware_params.yaml）
+        const servoConfigs = [
+            {
+                name: 'shoulder_pan_joint',
+                displayName: '肩部旋转',
+                servo_id: 0,
+                min: 400000,
+                max: 2600000,
+                zero: 900000,
+                angle_min: -0.05,
+                angle_max: 3.05
+            },
+            {
+                name: 'shoulder_lift_joint',
+                displayName: '肩部抬升',
+                servo_id: 1,
+                min: 400000,
+                max: 1900000,
+                zero: 1200000,
+                angle_min: -1.75,
+                angle_max: 1.05
+            },
+            {
+                name: 'elbow_joint',
+                displayName: '肘关节',
+                servo_id: 2,
+                min: 1200000,
+                max: 2600000,
+                zero: 2000000,
+                angle_min: -1.10,
+                angle_max: 1.05
+            },
+            {
+                name: 'wrist_1_joint',
+                displayName: '腕关节1',
+                servo_id: 3,
+                min: 300000,
+                max: 2200000,
+                zero: 900000,
+                angle_min: -1.10,
+                angle_max: 1.60
+            },
+            {
+                name: 'wrist_2_joint',
+                displayName: '腕关节2',
+                servo_id: 4,
+                min: 300000,
+                max: 2600000,
+                zero: 1300000,
+                angle_min: -1.05,
+                angle_max: 2.05
+            },
+            {
+                name: 'finger_joint',
+                displayName: '手指关节',
+                servo_id: 5,
+                min: 1300000,
+                max: 2600000,
+                zero: 1600000,
+                angle_min: -0.05,
+                angle_max: 1.65
+            }
+        ];
+        
+        // 创建舵机控制滑块
+        servoConfigs.forEach((config, index) => {
+            servos.push(config.zero); // 使用 zero 值作为默认值
+            
+            const div = document.createElement('div');
+            div.className = 'servo-control';
+            div.innerHTML = `
+                <label><strong>${config.displayName}</strong> (${config.name})</label><br>
+                <label>脉宽: <span id="value${index}">${config.zero}</span> ns 
+                (范围: ${config.min} - ${config.max})</label><br>
+                <label>角度: <span id="angle${index}">0.00</span> rad 
+                (范围: ${config.angle_min.toFixed(2)} - ${config.angle_max.toFixed(2)})</label><br>
+                <input type="range" id="servo${index}" 
+                       min="${config.min}" max="${config.max}" 
+                       value="${config.zero}" step="1000" 
+                       oninput="updateValue(${index}, this.value)">
+                <button onclick="sendServo(${index})">发送</button>
+                <button onclick="resetServo(${index})">重置为零点</button>
+            `;
+            document.getElementById('servos').appendChild(div);
+        });
+        
+        function updateValue(id, value) {
+            servos[id] = parseInt(value);
+            document.getElementById(`value${id}`).textContent = value;
+            
+            // 计算并显示角度（近似值，基于线性映射）
+            const config = servoConfigs[id];
+            const pulseRange = config.max - config.min;
+            const angleRange = config.angle_max - config.angle_min;
+            // 从脉宽映射到角度（简化计算，实际应该考虑 zero 点）
+            const normalized = (value - config.min) / pulseRange;
+            const angle = config.angle_min + normalized * angleRange;
+            document.getElementById(`angle${id}`).textContent = angle.toFixed(2);
+        }
+        
+        function resetServo(id) {
+            const config = servoConfigs[id];
+            servos[id] = config.zero;
+            document.getElementById(`servo${id}`).value = config.zero;
+            updateValue(id, config.zero);
+            log(`舵机 ${id} (${config.displayName}) 已重置为零点: ${config.zero} ns`);
+        }
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${time}] ${message}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function updateStatus(status, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${status}`;
+            statusDiv.textContent = message;
+        }
+        
+        function connect() {
+            const url = document.getElementById('serverUrl').value;
+            log(`正在连接到 ${url}...`);
+            updateStatus('connecting', '连接中...');
+            
+            ws = new WebSocket(url);
+            
+            ws.binaryType = 'arraybuffer';
+            
+            ws.onopen = () => {
+                log('连接成功！');
+                updateStatus('connected', '已连接');
+            };
+            
+            ws.onmessage = (event) => {
+                if (event.data instanceof ArrayBuffer) {
+                    // 二进制数据 = 视频帧
+                    const blob = new Blob([event.data], {type: 'image/jpeg'});
+                    const imageUrl = URL.createObjectURL(blob);
+                    const img = document.getElementById('video');
+                    const oldUrl = img.src;
+                    img.src = imageUrl;
+                    if (oldUrl) {
+                        URL.revokeObjectURL(oldUrl);
+                    }
+                    
+                    // 计算 FPS
+                    frameCount++;
+                    const now = Date.now();
+                    if (now - lastFpsTime >= 1000) {
+                        document.getElementById('fps').textContent = frameCount;
+                        frameCount = 0;
+                        lastFpsTime = now;
+                    }
+                } else {
+                    // JSON 数据 = 控制响应
+                    try {
+                        const response = JSON.parse(event.data);
+                        log(`收到响应: ${JSON.stringify(response)}`);
+                    } catch (e) {
+                        log(`解析响应失败: ${e}`);
+                    }
+                }
+            };
+            
+            ws.onerror = (error) => {
+                log(`连接错误: ${error}`);
+                updateStatus('disconnected', '连接错误');
+            };
+            
+            ws.onclose = () => {
+                log('连接已关闭');
+                updateStatus('disconnected', '未连接');
+                ws = null;
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+        
+        function sendServo(id) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('错误: 未连接到服务器');
+                return;
+            }
+            
+            const message = {
+                type: 'servo_control',
+                servo_id: id,
+                pulse_ns: servos[id]
+            };
+            
+            ws.send(JSON.stringify(message));
+            const config = servoConfigs[id];
+            log(`发送: ${config.displayName} (ID: ${id}) = ${servos[id]} ns`);
+        }
+        
+        function sendAll() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('错误: 未连接到服务器');
+                return;
+            }
+            
+            const servosData = servos.map((pulse, id) => ({
+                servo_id: id,
+                pulse_ns: pulse
+            }));
+            
+            const message = {
+                type: 'servos_batch',
+                servos: servosData
+            };
+            
+            ws.send(JSON.stringify(message));
+            log(`批量发送: ${servosData.length} 个舵机`);
+        }
+        
+        function resetAll() {
+            servoConfigs.forEach((config, index) => {
+                servos[index] = config.zero;
+                document.getElementById(`servo${index}`).value = config.zero;
+                updateValue(index, config.zero);
+            });
+            log('所有舵机已重置为零点位置');
+        }
+    </script>
+</body>
+</html>
+
