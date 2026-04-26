@@ -1,0 +1,10 @@
+# VSCode 缓存
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.db-shm
+*.db-wal
+
+# 其他无用文件
+.DS_Store
+*.log
